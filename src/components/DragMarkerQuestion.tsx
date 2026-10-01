@@ -194,17 +194,23 @@ export default function DragMarkerQuestion({
           <Image
             source={{ uri: imageUrl, cache: "reload" }}
             resizeMode="contain"
-            style={StyleSheet.absoluteFillObject}
+            style={styles.backgroundImage}
             onLoad={(event) => {
               const source = event.nativeEvent.source;
+
               if (source?.width && source?.height) {
-                setNaturalSize({ width: source.width, height: source.height });
+                setNaturalSize({
+                  width: source.width,
+                  height: source.height,
+                });
               }
+
               setImageLoaded(true);
             }}
             onError={(event) => {
               setImageFailed(true);
               setImageLoaded(false);
+
               console.error("MARKER IMAGE ERROR:", event.nativeEvent.error);
             }}
           />
@@ -225,7 +231,8 @@ export default function DragMarkerQuestion({
             }
 
             const left = (coordinate.x / naturalSize.width) * displaySize.width;
-            const top = (coordinate.y / naturalSize.height) * displaySize.height;
+            const top =
+              (coordinate.y / naturalSize.height) * displaySize.height;
 
             return (
               <View
@@ -252,43 +259,17 @@ export default function DragMarkerQuestion({
               : "Không tìm thấy URL ảnh nền qtype_ddmarker/bgimage"}
           </Text>
           <Text style={styles.imageErrorText}>
-            Ảnh marker phải được lấy từ đúng trường qtype_ddmarker/bgimage trong question.html.
+            Ảnh marker phải được lấy từ đúng trường qtype_ddmarker/bgimage trong
+            question.html.
           </Text>
         </View>
       )}
 
       <Text style={styles.hint}>
-        Chọn một marker ở trên, sau đó chạm vào vị trí tương ứng trên hình để đặt marker.
+        Chọn một marker ở trên, sau đó chạm vào vị trí tương ứng trên hình để
+        đặt marker.
       </Text>
 
-      <View style={styles.statusBox}>
-        <Text style={styles.statusText}>
-          Nguồn ảnh: {extractedBackground ? "qtype_ddmarker/bgimage" : image ? "fallback parser" : "không có"}
-        </Text>
-        <Text style={styles.statusText}>
-          Trạng thái: {imageFailed ? "lỗi" : imageLoaded ? "đã tải" : "đang tải"}
-        </Text>
-        {imageLoaded && naturalSize.width > 0 && (
-          <Text style={styles.statusText}>
-            Kích thước ảnh: {naturalSize.width} × {naturalSize.height}
-          </Text>
-        )}
-      </View>
-
-      {fields.length > 0 && (
-        <View style={styles.debugArea}>
-          {items.map((item) => {
-            const field = fields[(item.choice ?? 1) - 1];
-            if (!field) return null;
-
-            return (
-              <Text key={`coord-${item.id}`} style={styles.coordinateText}>
-                {item.text}: {answers[field.fieldName] || "Chưa đặt"}
-              </Text>
-            );
-          })}
-        </View>
-      )}
     </View>
   );
 }
@@ -336,7 +317,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   loadingLayer: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -401,5 +386,15 @@ const styles = StyleSheet.create({
   coordinateText: {
     fontSize: 13,
     marginBottom: 4,
+  },
+
+  backgroundImage: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: "100%",
+    height: "100%",
   },
 });

@@ -171,6 +171,7 @@ export default function QuestionRenderer({
         <DragMarkerQuestion
           question={question.text}
           image={question.backgroundImage}
+          token={token}
           items={question.dragItems ?? []}
           fields={question.dropFields ?? []}
           answers={answers}

@@ -47,9 +47,7 @@ export default function QuestionRenderer({
           choices={question.choices ?? []}
           value={question.fieldName ? answers[question.fieldName] : undefined}
           onChange={(value) => {
-            if (question.fieldName) {
-              setAnswer(question.fieldName, value);
-            }
+            if (question.fieldName) setAnswer(question.fieldName, value);
           }}
         />
       );
@@ -68,7 +66,7 @@ export default function QuestionRenderer({
       return (
         <TextQuestion
           question={question.text}
-          value={question.fieldName ? (answers[question.fieldName] ?? "") : ""}
+          value={question.fieldName ? answers[question.fieldName] ?? "" : ""}
           onChange={(value) => {
             if (question.fieldName) setAnswer(question.fieldName, value);
           }}
@@ -82,7 +80,7 @@ export default function QuestionRenderer({
         <TextQuestion
           question={question.text}
           numeric
-          value={question.fieldName ? (answers[question.fieldName] ?? "") : ""}
+          value={question.fieldName ? answers[question.fieldName] ?? "" : ""}
           onChange={(value) => {
             if (question.fieldName) setAnswer(question.fieldName, value);
           }}
@@ -93,7 +91,7 @@ export default function QuestionRenderer({
       return (
         <EssayQuestion
           question={question.text}
-          value={question.fieldName ? (answers[question.fieldName] ?? "") : ""}
+          value={question.fieldName ? answers[question.fieldName] ?? "" : ""}
           onChange={(value) => {
             if (question.fieldName) setAnswer(question.fieldName, value);
           }}
@@ -171,6 +169,7 @@ export default function QuestionRenderer({
         <DragMarkerQuestion
           question={question.text}
           image={question.backgroundImage}
+          rawHtml={question.html}
           token={token}
           items={question.dragItems ?? []}
           fields={question.dropFields ?? []}

@@ -21,6 +21,26 @@ function cleanText(value?: string | null): string {
     .trim();
 }
 
+/**
+ * Moodle sinh ID dạng q103:2_choice0_label. Dấu ':' có ý nghĩa đặc biệt
+ * trong CSS selector, vì vậy không dùng querySelector(`#${id}`).
+ */
+function findById(root: HTMLElement, id: string): HTMLElement | undefined {
+  if (!id) return undefined;
+
+  return root
+    .querySelectorAll("[id]")
+    .find((element) => element.getAttribute("id") === id);
+}
+
+function findLabelFor(root: HTMLElement, controlId: string): HTMLElement | undefined {
+  if (!controlId) return undefined;
+
+  return root
+    .querySelectorAll("label")
+    .find((label) => label.getAttribute("for") === controlId);
+}
+
 function detectType(html: string): QuestionType {
   if (html.includes("que description")) return "description";
   if (html.includes("que truefalse")) return "truefalse";
@@ -55,14 +75,15 @@ function getLabelForInput(root: HTMLElement, input: HTMLElement): string {
   if (labelId) {
     const ids = labelId.split(/\s+/).filter(Boolean);
     const text = ids
-      .map((item) => cleanText(root.querySelector(`#${item}`)?.text))
+      .map((item) => cleanText(findById(root, item)?.text))
       .filter(Boolean)
       .join(" ");
+
     if (text) return text;
   }
 
   if (id) {
-    const label = root.querySelector(`label[for="${id}"]`);
+    const label = findLabelFor(root, id);
     if (label) return cleanText(label.text);
   }
 
@@ -152,10 +173,9 @@ function parseSelectFields(root: HTMLElement): SelectField[] {
     }
 
     if (!label) {
-      const id = select.getAttribute("id");
-      if (id) {
-        label = cleanText(root.querySelector(`label[for="${id}"]`)?.text);
-      }
+      const id = select.getAttribute("id") ?? "";
+      const labelElement = findLabelFor(root, id);
+      label = cleanText(labelElement?.text);
     }
 
     const choices: Choice[] = select.querySelectorAll("option").map((option) => ({

@@ -7,11 +7,13 @@ export type QuestionType =
   | "shortanswer"
   | "essay"
   | "match"
+  | "randomsamatch"
   | "ddwtos"
   | "ddimageortext"
   | "ddmarker"
   | "numerical"
   | "calculated"
+  | "calculatedsimple"
   | "calculatedmulti"
   | "multianswer"
   | "ordering"
@@ -53,18 +55,16 @@ export interface DropField {
 
 export interface ParsedQuestion {
   type: QuestionType;
-
   text: string;
   html: string;
+  qtextHtml?: string;
 
   fieldName?: string;
   answerFormatField?: string;
   answerFormatValue?: string;
 
   choices?: Choice[];
-
   selectFields?: SelectField[];
-
   clozeParts?: ClozePart[];
 
   orderingItems?: OrderingItem[];

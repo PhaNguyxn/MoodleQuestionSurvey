@@ -30,10 +30,6 @@ function decodeHtmlUrl(value?: string): string | undefined {
     .trim();
 }
 
-/**
- * ddmarker có nhiều <img> trong HTML (icon/marker/background).
- * Chỉ lấy đúng ảnh nền qtype_ddmarker/bgimage thay vì lấy img đầu tiên.
- */
 function extractMarkerBackground(rawHtml?: string): string | undefined {
   if (!rawHtml) return undefined;
 
@@ -46,9 +42,7 @@ function extractMarkerBackground(rawHtml?: string): string | undefined {
     if (src) candidates.push(src);
   }
 
-  const exact = candidates.find((src) =>
-    /qtype_ddmarker\/bgimage/i.test(src),
-  );
+  const exact = candidates.find((src) => /qtype_ddmarker\/bgimage/i.test(src));
   if (exact) return exact;
 
   const probable = candidates.find(
@@ -56,7 +50,6 @@ function extractMarkerBackground(rawHtml?: string): string | undefined {
   );
   if (probable) return probable;
 
-  // Một số theme đặt URL ảnh nền trong style="background-image:url(...)".
   const styleMatch = rawHtml.match(
     /background-image\s*:\s*url\(\s*["']?([^"')]+)["']?\s*\)/i,
   );
@@ -87,10 +80,14 @@ function buildAuthenticatedImageUrl(
     );
   }
 
-  if (!token || /[?&]token=/.test(url)) return url;
+  if (token && !/[?&]token=/.test(url)) {
+    const separator = url.includes("?") ? "&" : "?";
+    url = `${url}${separator}token=${encodeURIComponent(token)}`;
+  }
 
+  // Tránh iOS giữ ảnh cũ trong cache khi Moodle thay file nhưng URL không đổi.
   const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}token=${encodeURIComponent(token)}`;
+  return `${url}${separator}_ts=${Date.now()}`;
 }
 
 function parseCoordinate(value?: string): { x: number; y: number } | null {
@@ -128,7 +125,6 @@ export default function DragMarkerQuestion({
     [rawHtml],
   );
 
-  // Ưu tiên URL lấy đúng từ qtype_ddmarker/bgimage trong question.html.
   const sourceImage = extractedBackground ?? image;
 
   const imageUrl = useMemo(
@@ -196,7 +192,7 @@ export default function DragMarkerQuestion({
           )}
 
           <Image
-            source={{ uri: imageUrl }}
+            source={{ uri: imageUrl, cache: "reload" }}
             resizeMode="contain"
             style={StyleSheet.absoluteFillObject}
             onLoad={(event) => {

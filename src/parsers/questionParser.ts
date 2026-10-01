@@ -23,7 +23,7 @@ function cleanText(value?: string | null): string {
 
 /**
  * Moodle sinh ID dạng q103:2_choice0_label. Dấu ':' có ý nghĩa đặc biệt
- * trong CSS selector, vì vậy không dùng querySelector(`#${id}`).
+ * trong CSS selector nên không dùng querySelector(`#${id}`).
  */
 function findById(root: HTMLElement, id: string): HTMLElement | undefined {
   if (!id) return undefined;
@@ -41,7 +41,7 @@ function findLabelFor(root: HTMLElement, controlId: string): HTMLElement | undef
     .find((label) => label.getAttribute("for") === controlId);
 }
 
-function detectType(html: string): QuestionType {
+function detectType(root: HTMLElement, html: string): QuestionType {
   if (html.includes("que description")) return "description";
   if (html.includes("que truefalse")) return "truefalse";
   if (html.includes("que gapselect")) return "gapselect";
@@ -60,9 +60,16 @@ function detectType(html: string): QuestionType {
   if (html.includes("que ordering")) return "ordering";
 
   if (html.includes("que multichoice")) {
-    return html.includes('type="checkbox"')
-      ? "multichoice-multiple"
-      : "multichoice-single";
+    // Không kiểm tra checkbox trên toàn HTML vì Moodle luôn có checkbox
+    // "Flag question". Chỉ kiểm tra các control đáp án thực sự.
+    const answerInputs = root.querySelectorAll(".answer input");
+    const hasChoiceCheckbox = answerInputs.some((input) => {
+      const type = input.getAttribute("type") ?? "";
+      const name = input.getAttribute("name") ?? "";
+      return type === "checkbox" && /_choice\d+$/.test(name);
+    });
+
+    return hasChoiceCheckbox ? "multichoice-multiple" : "multichoice-single";
   }
 
   return "unknown";
@@ -90,7 +97,8 @@ function getLabelForInput(root: HTMLElement, input: HTMLElement): string {
   const parentLabel = input.closest("label");
   if (parentLabel) return cleanText(parentLabel.text);
 
-  const answerRow = input.closest(".r0") ?? input.closest(".r1") ?? input.parentNode;
+  // Fallback chỉ trong vùng answer, tránh lấy nhầm "Flag question".
+  const answerRow = input.closest(".answer") ?? input.closest(".r0") ?? input.closest(".r1");
   return cleanText((answerRow as HTMLElement | undefined)?.text);
 }
 
@@ -105,7 +113,13 @@ function parseRadioChoices(root: HTMLElement): {
   fieldName?: string;
   choices: Choice[];
 } {
-  const inputs = root.querySelectorAll('input[type="radio"]');
+  const inputs = root
+    .querySelectorAll('.answer input[type="radio"]')
+    .filter((input) => {
+      const name = input.getAttribute("name") ?? "";
+      return /_answer$/.test(name);
+    });
+
   const choices: Choice[] = [];
   let fieldName: string | undefined;
 
@@ -129,21 +143,24 @@ function parseRadioChoices(root: HTMLElement): {
 }
 
 function parseCheckboxChoices(root: HTMLElement): Choice[] {
-  const inputs = root.querySelectorAll('input[type="checkbox"]');
-
-  return inputs
-    .filter((input) => Boolean(input.getAttribute("name")))
-    .map((input) => {
-      const fieldName = input.getAttribute("name") ?? "";
-      const value = input.getAttribute("value") ?? "1";
-      const label = stripChoicePrefix(getLabelForInput(root, input));
-
-      return {
-        label: label || fieldName,
-        value,
-        fieldName,
-      };
+  const inputs = root
+    .querySelectorAll('.answer input[type="checkbox"]')
+    .filter((input) => {
+      const name = input.getAttribute("name") ?? "";
+      return /_choice\d+$/.test(name);
     });
+
+  return inputs.map((input) => {
+    const fieldName = input.getAttribute("name") ?? "";
+    const value = input.getAttribute("value") ?? "1";
+    const label = stripChoicePrefix(getLabelForInput(root, input));
+
+    return {
+      label: label || fieldName,
+      value,
+      fieldName,
+    };
+  });
 }
 
 function parseTextInput(root: HTMLElement): string | undefined {
@@ -346,7 +363,7 @@ function parseCloze(root: HTMLElement): ClozePart[] {
 
 export function parseQuestion(html: string): ParsedQuestion {
   const root = parse(html);
-  const type = detectType(html);
+  const type = detectType(root, html);
   const qtext = root.querySelector(".qtext");
 
   const result: ParsedQuestion = {

@@ -28,8 +28,11 @@ export default function QuestionSurveyScreen() {
   const [questions, setQuestions] = useState<SurveyQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [page, setPage] = useState(0);
+  const [nextPage, setNextPage] = useState<number | null>(null);
 
   const loadPage = useCallback(async (targetPage: number) => {
+    if (targetPage < 0) return;
+
     try {
       setLoading(true);
       setError(null);
@@ -50,9 +53,12 @@ export default function QuestionSurveyScreen() {
 
       setQuestions(parsedQuestions);
       setPage(targetPage);
+
+      // Moodle trả nextpage = -1 khi không còn trang kế tiếp.
+      const apiNextPage = Number(data?.nextpage);
+      setNextPage(Number.isFinite(apiNextPage) && apiNextPage >= 0 ? apiNextPage : null);
     } catch (e) {
       console.error("LOAD QUESTION ERROR:", e);
-      setQuestions([]);
       setError(e instanceof Error ? e.message : "Không thể tải câu hỏi từ Moodle.");
     } finally {
       setLoading(false);
@@ -81,7 +87,7 @@ export default function QuestionSurveyScreen() {
     );
   }
 
-  if (error) {
+  if (error && !questions.length) {
     return (
       <View style={styles.center}>
         <Text style={styles.errorTitle}>Không thể tải dữ liệu</Text>
@@ -110,6 +116,12 @@ export default function QuestionSurveyScreen() {
         </Text>
       </View>
 
+      {error && (
+        <View style={styles.inlineError}>
+          <Text style={styles.inlineErrorText}>{error}</Text>
+        </View>
+      )}
+
       {questions.map((item, index) => (
         <View key={`${item.slot}-${index}`} style={styles.questionCard}>
           <View style={styles.questionHeader}>
@@ -129,12 +141,18 @@ export default function QuestionSurveyScreen() {
         <Pressable
           disabled={page === 0}
           style={[styles.navButton, page === 0 && styles.navDisabled]}
-          onPress={() => loadPage(Math.max(0, page - 1))}
+          onPress={() => loadPage(page - 1)}
         >
           <Text style={styles.navText}>← Trang trước</Text>
         </Pressable>
 
-        <Pressable style={styles.navButton} onPress={() => loadPage(page + 1)}>
+        <Pressable
+          disabled={nextPage === null}
+          style={[styles.navButton, nextPage === null && styles.navDisabled]}
+          onPress={() => {
+            if (nextPage !== null) loadPage(nextPage);
+          }}
+        >
           <Text style={styles.navText}>Trang sau →</Text>
         </Pressable>
       </View>
@@ -174,6 +192,18 @@ const styles = StyleSheet.create({
   subtitle: {
     marginTop: 4,
     color: "#666",
+  },
+  inlineError: {
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#fff3f3",
+    borderWidth: 1,
+    borderColor: "#efcaca",
+  },
+  inlineErrorText: {
+    color: "#9b1c1c",
+    fontSize: 13,
   },
   questionCard: {
     backgroundColor: "#fff",

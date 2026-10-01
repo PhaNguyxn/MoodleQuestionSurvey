@@ -20,12 +20,14 @@ interface Props {
   question: ParsedQuestion;
   answers: Record<string, string>;
   setAnswer: (field: string, value: string) => void;
+  token?: string;
 }
 
 export default function QuestionRenderer({
   question,
   answers,
   setAnswer,
+  token,
 }: Props) {
   switch (question.type) {
     case "description":
@@ -68,9 +70,7 @@ export default function QuestionRenderer({
           question={question.text}
           value={question.fieldName ? (answers[question.fieldName] ?? "") : ""}
           onChange={(value) => {
-            if (question.fieldName) {
-              setAnswer(question.fieldName, value);
-            }
+            if (question.fieldName) setAnswer(question.fieldName, value);
           }}
         />
       );
@@ -84,9 +84,7 @@ export default function QuestionRenderer({
           numeric
           value={question.fieldName ? (answers[question.fieldName] ?? "") : ""}
           onChange={(value) => {
-            if (question.fieldName) {
-              setAnswer(question.fieldName, value);
-            }
+            if (question.fieldName) setAnswer(question.fieldName, value);
           }}
         />
       );
@@ -97,9 +95,7 @@ export default function QuestionRenderer({
           question={question.text}
           value={question.fieldName ? (answers[question.fieldName] ?? "") : ""}
           onChange={(value) => {
-            if (question.fieldName) {
-              setAnswer(question.fieldName, value);
-            }
+            if (question.fieldName) setAnswer(question.fieldName, value);
           }}
         />
       );
@@ -149,6 +145,7 @@ export default function QuestionRenderer({
       return (
         <DragDropTextQuestion
           question={question.text}
+          qtextHtml={question.qtextHtml}
           items={question.dragItems ?? []}
           fields={question.dropFields ?? []}
           answers={answers}
@@ -161,6 +158,7 @@ export default function QuestionRenderer({
         <DragDropImageQuestion
           question={question.text}
           image={question.backgroundImage}
+          token={token}
           items={question.dragItems ?? []}
           fields={question.dropFields ?? []}
           answers={answers}

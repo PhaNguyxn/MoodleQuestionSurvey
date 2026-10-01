@@ -20,13 +20,21 @@ interface Props {
 }
 
 function buildCleanQuestionText(html?: string, fallback = ""): string {
-  if (!html) return fallback;
+  if (!html) {
+    return fallback
+      .replace(/Blank\s+\d+\s+Question\s+\d+/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
 
-  // Loại bỏ label hỗ trợ đọc màn hình và nội dung option của <select>,
-  // sau đó thay mỗi select bằng một placeholder dễ hiểu trên mobile.
+  // Moodle chèn nhãn trợ năng như "Blank 1 Question 1" quanh <select>.
+  // Beauty Render không cần hiển thị các nhãn này; ta giữ một placeholder ___
+  // để người dùng vẫn thấy đúng vị trí chỗ trống trong câu.
   let cleaned = html
-    .replace(/<label[^>]*class=["'][^"']*accesshide[^"']*["'][^>]*>[\s\S]*?<\/label>/gi, "")
-    .replace(/<span[^>]*class=["'][^"']*accesshide[^"']*["'][^>]*>[\s\S]*?<\/span>/gi, "")
+    .replace(
+      /<(?:label|span)[^>]*class=["'][^"']*(?:accesshide|sr-only|visually-hidden)[^"']*["'][^>]*>[\s\S]*?<\/(?:label|span)>/gi,
+      "",
+    )
     .replace(/<select[\s\S]*?<\/select>/gi, " ___ ");
 
   const root = parse(cleaned);
@@ -34,6 +42,10 @@ function buildCleanQuestionText(html?: string, fallback = ""): string {
   return root.text
     .replace(/&nbsp;/g, " ")
     .replace(/\u00a0/g, " ")
+    // Một số theme/plugin Moodle để accessibility text thành text node thường.
+    // Xóa mẫu này sau khi chuyển HTML -> text để tránh hiện trên mobile.
+    .replace(/Blank\s+\d+\s+Question\s+\d+/gi, "")
+    .replace(/\s+([.,;:!?])/g, "$1")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -105,9 +117,9 @@ export default function SelectMissingWordsQuestion({
 
             <ScrollView style={styles.optionsList}>
               {activeField?.choices
-                .filter((choice) => Boolean(choice.value) || Boolean(choice.label))
+                // Bỏ option placeholder rỗng vì UI đã có "Chọn đáp án" riêng.
+                .filter((choice) => Boolean(choice.value))
                 .map((choice, index) => {
-                  const isEmpty = !choice.value;
                   const isSelected =
                     answers[activeField.fieldName] === choice.value;
 
@@ -120,14 +132,7 @@ export default function SelectMissingWordsQuestion({
                       ]}
                       onPress={() => choose(choice)}
                     >
-                      <Text
-                        style={[
-                          styles.optionText,
-                          isEmpty && styles.placeholderText,
-                        ]}
-                      >
-                        {choice.label || "Chọn đáp án"}
-                      </Text>
+                      <Text style={styles.optionText}>{choice.label}</Text>
                     </Pressable>
                   );
                 })}

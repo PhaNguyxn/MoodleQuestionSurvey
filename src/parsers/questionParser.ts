@@ -16,197 +16,154 @@ function cleanText(value?: string | null): string {
 
   return value
     .replace(/&nbsp;/g, " ")
+    .replace(/\u00a0/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function detectType(html: string): QuestionType {
-  if (html.includes("que description")) {
-    return "description";
-  }
-
-  if (html.includes("que truefalse")) {
-    return "truefalse";
-  }
-
-  if (html.includes("que gapselect")) {
-    return "gapselect";
-  }
-
-  if (html.includes("que shortanswer")) {
-    return "shortanswer";
-  }
-
-  if (html.includes("que essay")) {
-    return "essay";
-  }
-
-  if (html.includes("que match")) {
-    return "match";
-  }
-
-  if (html.includes("que ddwtos")) {
-    return "ddwtos";
-  }
-
-  if (html.includes("que ddimageortext")) {
-    return "ddimageortext";
-  }
-
-  if (html.includes("que ddmarker")) {
-    return "ddmarker";
-  }
-
-  if (html.includes("que numerical")) {
-    return "numerical";
-  }
-
-  // Phải kiểm tra calculatedmulti trước calculated.
-  if (html.includes("que calculatedmulti")) {
-    return "calculatedmulti";
-  }
-
-  if (html.includes("que calculated ")) {
-    return "calculated";
-  }
-
-  if (html.includes("que multianswer")) {
-    return "multianswer";
-  }
-
-  if (html.includes("que ordering")) {
-    return "ordering";
-  }
+  if (html.includes("que description")) return "description";
+  if (html.includes("que truefalse")) return "truefalse";
+  if (html.includes("que gapselect")) return "gapselect";
+  if (html.includes("que shortanswer")) return "shortanswer";
+  if (html.includes("que essay")) return "essay";
+  if (html.includes("que randomsamatch")) return "randomsamatch";
+  if (html.includes("que match")) return "match";
+  if (html.includes("que ddwtos")) return "ddwtos";
+  if (html.includes("que ddimageortext")) return "ddimageortext";
+  if (html.includes("que ddmarker")) return "ddmarker";
+  if (html.includes("que numerical")) return "numerical";
+  if (html.includes("que calculatedmulti")) return "calculatedmulti";
+  if (html.includes("que calculatedsimple")) return "calculatedsimple";
+  if (html.includes("que calculated ")) return "calculated";
+  if (html.includes("que multianswer")) return "multianswer";
+  if (html.includes("que ordering")) return "ordering";
 
   if (html.includes("que multichoice")) {
-    if (html.includes('type="checkbox"')) {
-      return "multichoice-multiple";
-    }
-
-    return "multichoice-single";
+    return html.includes('type="checkbox"')
+      ? "multichoice-multiple"
+      : "multichoice-single";
   }
 
   return "unknown";
+}
+
+function getLabelForInput(root: HTMLElement, input: HTMLElement): string {
+  const id = input.getAttribute("id") ?? "";
+  const labelId = input.getAttribute("aria-labelledby") ?? "";
+
+  if (labelId) {
+    const ids = labelId.split(/\s+/).filter(Boolean);
+    const text = ids
+      .map((item) => cleanText(root.querySelector(`#${item}`)?.text))
+      .filter(Boolean)
+      .join(" ");
+    if (text) return text;
+  }
+
+  if (id) {
+    const label = root.querySelector(`label[for="${id}"]`);
+    if (label) return cleanText(label.text);
+  }
+
+  const parentLabel = input.closest("label");
+  if (parentLabel) return cleanText(parentLabel.text);
+
+  const answerRow = input.closest(".r0") ?? input.closest(".r1") ?? input.parentNode;
+  return cleanText((answerRow as HTMLElement | undefined)?.text);
+}
+
+function stripChoicePrefix(label: string): string {
+  return label
+    .replace(/^[a-zA-Z][.)]\s*/, "")
+    .replace(/^\d+[.)]\s*/, "")
+    .trim();
 }
 
 function parseRadioChoices(root: HTMLElement): {
   fieldName?: string;
   choices: Choice[];
 } {
-  const inputs = root.querySelectorAll('.answer input[type="radio"]');
-
+  const inputs = root.querySelectorAll('input[type="radio"]');
   const choices: Choice[] = [];
   let fieldName: string | undefined;
 
   inputs.forEach((input) => {
     const value = input.getAttribute("value") ?? "";
     const name = input.getAttribute("name") ?? "";
-    const id = input.getAttribute("id") ?? "";
 
-    // Bỏ Clear my choice.
-    if (value === "-1") {
-      return;
-    }
+    if (!name || value === "-1") return;
+    if (!fieldName) fieldName = name;
 
-    if (!fieldName) {
-      fieldName = name;
-    }
-
-    const labelId = input.getAttribute("aria-labelledby");
-
-    let label = "";
-
-    if (labelId) {
-      const labelElement = root.querySelector(`#${labelId}`);
-
-      label = cleanText(labelElement?.text);
-    }
-
-    // True/False dùng <label for="">.
-    if (!label && id) {
-      const labelElement = root.querySelector(`label[for="${id}"]`);
-
-      label = cleanText(labelElement?.text);
-    }
-
-    // Bỏ a., b., c. ở đầu nếu có.
-    label = label.replace(/^[a-zA-Z]\.\s*/, "");
+    const label = stripChoicePrefix(getLabelForInput(root, input));
 
     choices.push({
-      label,
+      label: label || value,
       value,
       fieldName: name,
     });
   });
 
-  return {
-    fieldName,
-    choices,
-  };
+  return { fieldName, choices };
 }
 
 function parseCheckboxChoices(root: HTMLElement): Choice[] {
-  const inputs = root.querySelectorAll('.answer input[type="checkbox"]');
+  const inputs = root.querySelectorAll('input[type="checkbox"]');
 
-  return inputs.map((input) => {
-    const fieldName = input.getAttribute("name") ?? "";
+  return inputs
+    .filter((input) => Boolean(input.getAttribute("name")))
+    .map((input) => {
+      const fieldName = input.getAttribute("name") ?? "";
+      const value = input.getAttribute("value") ?? "1";
+      const label = stripChoicePrefix(getLabelForInput(root, input));
 
-    const value = input.getAttribute("value") ?? "1";
-
-    const labelId = input.getAttribute("aria-labelledby");
-
-    let label = "";
-
-    if (labelId) {
-      label = cleanText(root.querySelector(`#${labelId}`)?.text);
-    }
-
-    label = label.replace(/^[a-zA-Z]\.\s*/, "");
-
-    return {
-      label,
-      value,
-      fieldName,
-    };
-  });
+      return {
+        label: label || fieldName,
+        value,
+        fieldName,
+      };
+    });
 }
 
 function parseTextInput(root: HTMLElement): string | undefined {
   const input = root.querySelector(
-    '.answer input[type="text"], .ablock input[type="text"]',
+    '.answer input[type="text"], .ablock input[type="text"], input[type="text"][name*="_answer"]',
   );
 
   return input?.getAttribute("name") ?? undefined;
 }
 
 function parseSelectFields(root: HTMLElement): SelectField[] {
-  const selects = root.querySelectorAll("select");
+  const selects = root
+    .querySelectorAll("select")
+    .filter((select) => Boolean(select.getAttribute("name")));
 
   return selects.map((select) => {
     const fieldName = select.getAttribute("name") ?? "";
-
     let label = "";
 
     const row = select.closest("tr");
-
     if (row) {
-      const textCell = row.querySelector(".text");
-
-      label = cleanText(textCell?.text);
+      label = cleanText(
+        row.querySelector(".text")?.text ??
+          row.querySelector("th")?.text ??
+          row.querySelector("td")?.text,
+      );
     }
 
-    const choices: Choice[] = select
-      .querySelectorAll("option")
-      .map((option) => ({
-        label: cleanText(option.text),
-        value: option.getAttribute("value") ?? "",
-      }));
+    if (!label) {
+      const id = select.getAttribute("id");
+      if (id) {
+        label = cleanText(root.querySelector(`label[for="${id}"]`)?.text);
+      }
+    }
 
-    return {
-      fieldName,
-      label,
-      choices,
-    };
+    const choices: Choice[] = select.querySelectorAll("option").map((option) => ({
+      label: cleanText(option.text) || "Chọn...",
+      value: option.getAttribute("value") ?? "",
+    }));
+
+    return { fieldName, label, choices };
   });
 }
 
@@ -216,21 +173,36 @@ function parseOrdering(root: HTMLElement): {
 } {
   const items = root.querySelectorAll(".sortableitem").map((item) => {
     const id = item.getAttribute("id") ?? "";
+    const content =
+      item.querySelector("[data-itemcontent]") ??
+      item.querySelector(".sortableitemcontent") ??
+      item.querySelector(".content");
 
-    const content = item.querySelector("[data-itemcontent]");
+    let text = cleanText(content?.text ?? item.text);
+    text = text.replace(/^[↑↓☰\s]+/, "").trim();
 
-    return {
-      id,
-      text: cleanText(content?.text),
-    };
+    return { id, text };
   });
 
   const hidden = root.querySelector('input[type="hidden"][name*="_response_"]');
 
   return {
-    items,
+    items: items.filter((item) => item.id && item.text),
     fieldName: hidden?.getAttribute("name") ?? undefined,
   };
+}
+
+function parseDropFields(root: HTMLElement, nameToken: "_p" | "_c"): DropField[] {
+  return root
+    .querySelectorAll(`input[type="hidden"][name*="${nameToken}"]`)
+    .filter((input) => {
+      const name = input.getAttribute("name") ?? "";
+      return /_(p|c)\d+$/.test(name);
+    })
+    .map((input, index) => ({
+      place: index + 1,
+      fieldName: input.getAttribute("name") ?? "",
+    }));
 }
 
 function parseDragDropText(root: HTMLElement): {
@@ -239,22 +211,17 @@ function parseDragDropText(root: HTMLElement): {
 } {
   const dragHomes = root.querySelectorAll(".draghome");
 
-  const items: DragItem[] = dragHomes.map((element, index) => ({
-    id: `choice-${index + 1}`,
-    choice: index + 1,
-    text: cleanText(element.text),
-  }));
-
-  const inputs = root.querySelectorAll('input.placeinput[type="hidden"]');
-
-  const fields: DropField[] = inputs.map((input, index) => ({
-    place: index + 1,
-    fieldName: input.getAttribute("name") ?? "",
-  }));
+  const items: DragItem[] = dragHomes
+    .map((element, index) => ({
+      id: element.getAttribute("id") ?? `choice-${index + 1}`,
+      choice: Number(element.getAttribute("data-choice")) || index + 1,
+      text: cleanText(element.text),
+    }))
+    .filter((item) => item.text);
 
   return {
     items,
-    fields,
+    fields: parseDropFields(root, "_p"),
   };
 }
 
@@ -263,29 +230,23 @@ function parseDragImage(root: HTMLElement): {
   items: DragItem[];
   fields: DropField[];
 } {
-  const imageElement = root.querySelector("img.dropbackground");
-
+  const imageElement =
+    root.querySelector("img.dropbackground") ?? root.querySelector(".dropzone img");
   const image = imageElement?.getAttribute("src") ?? undefined;
 
   const dragHomes = root.querySelectorAll(".draghomes .draghome");
-
-  const items: DragItem[] = dragHomes.map((element, index) => ({
-    id: `choice-${index + 1}`,
-    choice: index + 1,
-    text: cleanText(element.text),
-  }));
-
-  const inputs = root.querySelectorAll('input.placeinput[type="hidden"]');
-
-  const fields: DropField[] = inputs.map((input, index) => ({
-    place: index + 1,
-    fieldName: input.getAttribute("name") ?? "",
-  }));
+  const items: DragItem[] = dragHomes
+    .map((element, index) => ({
+      id: element.getAttribute("id") ?? `choice-${index + 1}`,
+      choice: Number(element.getAttribute("data-choice")) || index + 1,
+      text: cleanText(element.text),
+    }))
+    .filter((item) => item.text);
 
   return {
     image,
     items,
-    fields,
+    fields: parseDropFields(root, "_p"),
   };
 }
 
@@ -295,103 +256,84 @@ function parseMarkers(root: HTMLElement): {
   fields: DropField[];
 } {
   const image =
-    root.querySelector("img.dropbackground")?.getAttribute("src") ?? undefined;
+    (root.querySelector("img.dropbackground") ?? root.querySelector(".dropzone img"))
+      ?.getAttribute("src") ?? undefined;
 
-  const markers = root.querySelectorAll(".draghomes .marker");
+  const candidates = [
+    ...root.querySelectorAll(".draghomes .marker"),
+    ...root.querySelectorAll(".draghomes .draghome"),
+  ];
 
-  const items: DragItem[] = markers.map((marker, index) => ({
-    id: `marker-${index + 1}`,
-    choice: index + 1,
-    text: cleanText(marker.querySelector(".markertext")?.text),
-  }));
+  const seen = new Set<string>();
+  const items: DragItem[] = [];
 
-  const inputs = root.querySelectorAll('.ddform input[type="hidden"]');
+  candidates.forEach((marker, index) => {
+    const text = cleanText(marker.querySelector(".markertext")?.text ?? marker.text);
+    if (!text || seen.has(text)) return;
+    seen.add(text);
 
-  const fields: DropField[] = inputs.map((input, index) => ({
-    place: index + 1,
-    fieldName: input.getAttribute("name") ?? "",
-  }));
+    items.push({
+      id: marker.getAttribute("id") ?? `marker-${index + 1}`,
+      choice: index + 1,
+      text,
+    });
+  });
 
   return {
     image,
     items,
-    fields,
+    fields: parseDropFields(root, "_c"),
   };
 }
 
-/**
- * Parser Cloze đơn giản cho response hiện tại:
- * text + <span class="subquestion"><input .../></span>
- */
 function parseCloze(root: HTMLElement): ClozePart[] {
-  const formulation = root.querySelector(".formulation");
-
-  if (!formulation) return [];
-
-  const paragraph = formulation.querySelector("p");
-
-  if (!paragraph) return [];
+  const qtext = root.querySelector(".qtext");
+  if (!qtext) return [];
 
   const parts: ClozePart[] = [];
 
-  paragraph.childNodes.forEach((node: any) => {
-    // Text node
-    if (node.nodeType === 3) {
-      const text = node.rawText ?? "";
-
-      if (text) {
-        parts.push({
-          type: "text",
-          text,
-        });
+  const walk = (element: HTMLElement) => {
+    element.childNodes.forEach((node: any) => {
+      if (node.nodeType === 3) {
+        const text = node.rawText ?? "";
+        if (text) parts.push({ type: "text", text });
+        return;
       }
 
-      return;
-    }
-
-    const element = node as HTMLElement;
-
-    if (element.classNames?.includes("subquestion")) {
-      const input = element.querySelector("input");
-
-      const fieldName = input?.getAttribute("name");
+      const child = node as HTMLElement;
+      const input = child.tagName === "INPUT" ? child : child.querySelector?.("input");
+      const select = child.tagName === "SELECT" ? child : child.querySelector?.("select");
+      const control = input ?? select;
+      const fieldName = control?.getAttribute?.("name");
 
       if (fieldName) {
-        parts.push({
-          type: "input",
-          fieldName,
-        });
+        parts.push({ type: "input", fieldName });
+        return;
       }
 
-      return;
-    }
+      if (child.childNodes?.length) {
+        walk(child);
+      } else {
+        const text = child.text;
+        if (text) parts.push({ type: "text", text });
+      }
+    });
+  };
 
-    const text = element.text;
-
-    if (text) {
-      parts.push({
-        type: "text",
-        text,
-      });
-    }
-  });
-
+  walk(qtext);
   return parts;
 }
 
 export function parseQuestion(html: string): ParsedQuestion {
   const root = parse(html);
-
   const type = detectType(html);
-
   const qtext = root.querySelector(".qtext");
-
-  const text = cleanText(qtext?.text);
 
   const result: ParsedQuestion = {
     type,
-    text,
+    text: cleanText(qtext?.text),
     html,
+    qtextHtml: qtext?.innerHTML ?? undefined,
   };
 
   switch (type) {
@@ -399,98 +341,71 @@ export function parseQuestion(html: string): ParsedQuestion {
     case "truefalse":
     case "calculatedmulti": {
       const parsed = parseRadioChoices(root);
-
       result.fieldName = parsed.fieldName;
-
       result.choices = parsed.choices;
-
       break;
     }
 
-    case "multichoice-multiple": {
+    case "multichoice-multiple":
       result.choices = parseCheckboxChoices(root);
-
       break;
-    }
 
     case "shortanswer":
     case "numerical":
-    case "calculated": {
+    case "calculated":
+    case "calculatedsimple":
       result.fieldName = parseTextInput(root);
-
       break;
-    }
 
     case "essay": {
       const textarea = root.querySelector("textarea");
-
       result.fieldName = textarea?.getAttribute("name") ?? undefined;
 
       const format = root.querySelector(
         'input[type="hidden"][name$="_answerformat"]',
       );
-
       result.answerFormatField = format?.getAttribute("name") ?? undefined;
-
       result.answerFormatValue = format?.getAttribute("value") ?? undefined;
-
       break;
     }
 
     case "gapselect":
-    case "match": {
+    case "match":
+    case "randomsamatch":
       result.selectFields = parseSelectFields(root);
-
       break;
-    }
 
-    case "multianswer": {
+    case "multianswer":
       result.clozeParts = parseCloze(root);
-
       break;
-    }
 
     case "ordering": {
       const parsed = parseOrdering(root);
-
       result.orderingItems = parsed.items;
-
       result.orderingFieldName = parsed.fieldName;
-
       break;
     }
 
     case "ddwtos": {
       const parsed = parseDragDropText(root);
-
       result.dragItems = parsed.items;
-
       result.dropFields = parsed.fields;
-
       break;
     }
 
     case "ddimageortext": {
       const parsed = parseDragImage(root);
-
       result.backgroundImage = parsed.image;
-
       result.dragItems = parsed.items;
-
       result.dropFields = parsed.fields;
-
       break;
     }
 
     case "ddmarker": {
       const parsed = parseMarkers(root);
-
       result.backgroundImage = parsed.image;
-
       result.dragItems = parsed.items;
-
       result.dropFields = parsed.fields;
-
       break;
     }
   }

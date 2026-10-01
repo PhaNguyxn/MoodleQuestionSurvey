@@ -31,12 +31,7 @@ export default function QuestionRenderer({
 }: Props) {
   switch (question.type) {
     case "description":
-      return (
-        <DescriptionQuestion
-          text={question.text}
-          html={question.qtextHtml}
-        />
-      );
+      return <DescriptionQuestion text={question.text} html={question.qtextHtml} />;
 
     case "multichoice-single":
     case "truefalse":
@@ -124,7 +119,7 @@ export default function QuestionRenderer({
       return (
         <ClozeQuestion
           parts={question.clozeParts ?? []}
-          html={question.html}
+          qtextHtml={question.qtextHtml}
           answers={answers}
           setAnswer={setAnswer}
         />

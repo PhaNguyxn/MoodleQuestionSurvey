@@ -108,6 +108,7 @@ export default function QuestionRenderer({
       return (
         <SelectMissingWordsQuestion
           question={question.text}
+          qtextHtml={question.qtextHtml}
           fields={question.selectFields ?? []}
           answers={answers}
           setAnswer={setAnswer}

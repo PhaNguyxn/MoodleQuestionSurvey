@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Image,
-  LayoutChangeEvent,
   Pressable,
   StyleSheet,
   Text,
@@ -13,6 +12,7 @@ import { DragItem, DropField } from "../types/question";
 interface Props {
   question: string;
   image?: string;
+  rawHtml?: string;
   token?: string;
   items: DragItem[];
   fields: DropField[];
@@ -20,16 +20,74 @@ interface Props {
   setAnswer: (field: string, value: string) => void;
 }
 
-function buildAuthenticatedImageUrl(image?: string, token?: string): string | undefined {
-  if (!image) return undefined;
+function decodeHtmlUrl(value?: string): string | undefined {
+  if (!value) return undefined;
 
-  let url = image;
+  return value
+    .replace(/&amp;/gi, "&")
+    .replace(/&#38;/g, "&")
+    .replace(/&#x26;/gi, "&")
+    .trim();
+}
 
-  if (url.includes("/pluginfile.php/") && !url.includes("/webservice/pluginfile.php/")) {
-    url = url.replace("/pluginfile.php/", "/webservice/pluginfile.php/");
+/**
+ * ddmarker có nhiều <img> trong HTML (icon/marker/background).
+ * Chỉ lấy đúng ảnh nền qtype_ddmarker/bgimage thay vì lấy img đầu tiên.
+ */
+function extractMarkerBackground(rawHtml?: string): string | undefined {
+  if (!rawHtml) return undefined;
+
+  const candidates: string[] = [];
+  const imgRegex = /<img\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = imgRegex.exec(rawHtml)) !== null) {
+    const src = decodeHtmlUrl(match[1]);
+    if (src) candidates.push(src);
   }
 
-  if (!token) return url;
+  const exact = candidates.find((src) =>
+    /qtype_ddmarker\/bgimage/i.test(src),
+  );
+  if (exact) return exact;
+
+  const probable = candidates.find(
+    (src) => /ddmarker/i.test(src) && /bgimage/i.test(src),
+  );
+  if (probable) return probable;
+
+  // Một số theme đặt URL ảnh nền trong style="background-image:url(...)".
+  const styleMatch = rawHtml.match(
+    /background-image\s*:\s*url\(\s*["']?([^"')]+)["']?\s*\)/i,
+  );
+  const styleUrl = decodeHtmlUrl(styleMatch?.[1]);
+  if (styleUrl && /qtype_ddmarker\/bgimage/i.test(styleUrl)) {
+    return styleUrl;
+  }
+
+  return undefined;
+}
+
+function buildAuthenticatedImageUrl(
+  image?: string,
+  token?: string,
+): string | undefined {
+  const decoded = decodeHtmlUrl(image);
+  if (!decoded) return undefined;
+
+  let url = decoded;
+
+  if (
+    url.includes("/pluginfile.php/") &&
+    !url.includes("/webservice/pluginfile.php/")
+  ) {
+    url = url.replace(
+      "/pluginfile.php/",
+      "/webservice/pluginfile.php/",
+    );
+  }
+
+  if (!token || /[?&]token=/.test(url)) return url;
 
   const separator = url.includes("?") ? "&" : "?";
   return `${url}${separator}token=${encodeURIComponent(token)}`;
@@ -38,7 +96,9 @@ function buildAuthenticatedImageUrl(image?: string, token?: string): string | un
 function parseCoordinate(value?: string): { x: number; y: number } | null {
   if (!value) return null;
 
-  const match = value.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+  const match = value.match(
+    /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/,
+  );
   if (!match) return null;
 
   return {
@@ -50,6 +110,7 @@ function parseCoordinate(value?: string): { x: number; y: number } | null {
 export default function DragMarkerQuestion({
   question,
   image,
+  rawHtml,
   token,
   items,
   fields,
@@ -60,35 +121,25 @@ export default function DragMarkerQuestion({
   const [imageFailed, setImageFailed] = useState(false);
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
   const [displaySize, setDisplaySize] = useState({ width: 0, height: 0 });
+  const [imageLoaded, setImageLoaded] = useState(false);
 
-  const imageUrl = useMemo(
-    () => buildAuthenticatedImageUrl(image, token),
-    [image, token],
+  const extractedBackground = useMemo(
+    () => extractMarkerBackground(rawHtml),
+    [rawHtml],
   );
 
-  useEffect(() => {
-    if (!imageUrl) return;
+  // Ưu tiên URL lấy đúng từ qtype_ddmarker/bgimage trong question.html.
+  const sourceImage = extractedBackground ?? image;
 
-    Image.getSize(
-      imageUrl,
-      (width, height) => setNaturalSize({ width, height }),
-      (error) => {
-        console.error("MARKER IMAGE SIZE ERROR:", error);
-        setImageFailed(true);
-      },
-    );
-  }, [imageUrl]);
+  const imageUrl = useMemo(
+    () => buildAuthenticatedImageUrl(sourceImage, token),
+    [sourceImage, token],
+  );
 
   const imageAspectRatio =
     naturalSize.width > 0 && naturalSize.height > 0
       ? naturalSize.width / naturalSize.height
       : 1.6;
-
-  const onImageLayout = (event: LayoutChangeEvent) => {
-    const width = event.nativeEvent.layout.width;
-    const height = width / imageAspectRatio;
-    setDisplaySize({ width, height });
-  };
 
   const selectedField = selected
     ? fields[(selected.choice ?? 1) - 1]
@@ -112,82 +163,100 @@ export default function DragMarkerQuestion({
       </View>
 
       {imageUrl && !imageFailed ? (
-        <View
-          style={styles.imageWrapper}
-          onLayout={onImageLayout}
+        <Pressable
+          style={[styles.imagePressable, { aspectRatio: imageAspectRatio }]}
+          onLayout={(event) => {
+            setDisplaySize({
+              width: event.nativeEvent.layout.width,
+              height: event.nativeEvent.layout.height,
+            });
+          }}
+          onPress={(event) => {
+            if (!selected || !selectedField) return;
+            if (!displaySize.width || !displaySize.height) return;
+            if (!naturalSize.width || !naturalSize.height) return;
+
+            const { locationX, locationY } = event.nativeEvent;
+
+            const originalX = Math.round(
+              (locationX / displaySize.width) * naturalSize.width,
+            );
+            const originalY = Math.round(
+              (locationY / displaySize.height) * naturalSize.height,
+            );
+
+            setAnswer(selectedField.fieldName, `${originalX},${originalY}`);
+            setSelected(null);
+          }}
         >
-          <Pressable
-            style={[
-              styles.imagePressable,
-              { aspectRatio: imageAspectRatio },
-            ]}
-            onPress={(event) => {
-              if (!selected || !selectedField) return;
-              if (!displaySize.width || !displaySize.height) return;
-              if (!naturalSize.width || !naturalSize.height) return;
+          {!imageLoaded && (
+            <View style={styles.loadingLayer} pointerEvents="none">
+              <Text style={styles.loadingText}>Đang tải hình nền...</Text>
+            </View>
+          )}
 
-              const { locationX, locationY } = event.nativeEvent;
-
-              const originalX = Math.round(
-                (locationX / displaySize.width) * naturalSize.width,
-              );
-              const originalY = Math.round(
-                (locationY / displaySize.height) * naturalSize.height,
-              );
-
-              setAnswer(selectedField.fieldName, `${originalX},${originalY}`);
-              setSelected(null);
+          <Image
+            source={{ uri: imageUrl }}
+            resizeMode="contain"
+            style={StyleSheet.absoluteFillObject}
+            onLoad={(event) => {
+              const source = event.nativeEvent.source;
+              if (source?.width && source?.height) {
+                setNaturalSize({ width: source.width, height: source.height });
+              }
+              setImageLoaded(true);
             }}
-          >
-            <Image
-              source={{ uri: imageUrl }}
-              resizeMode="contain"
-              style={StyleSheet.absoluteFillObject}
-              onError={(event) => {
-                console.error("MARKER IMAGE ERROR:", event.nativeEvent.error);
-                setImageFailed(true);
-              }}
-            />
+            onError={(event) => {
+              setImageFailed(true);
+              setImageLoaded(false);
+              console.error("MARKER IMAGE ERROR:", event.nativeEvent.error);
+            }}
+          />
 
-            {items.map((item) => {
-              const field = fields[(item.choice ?? 1) - 1];
-              if (!field) return null;
+          {items.map((item) => {
+            const field = fields[(item.choice ?? 1) - 1];
+            if (!field) return null;
 
-              const coordinate = parseCoordinate(answers[field.fieldName]);
-              if (!coordinate || !naturalSize.width || !naturalSize.height) return null;
+            const coordinate = parseCoordinate(answers[field.fieldName]);
+            if (
+              !coordinate ||
+              !naturalSize.width ||
+              !naturalSize.height ||
+              !displaySize.width ||
+              !displaySize.height
+            ) {
+              return null;
+            }
 
-              const left = (coordinate.x / naturalSize.width) * displaySize.width;
-              const top = (coordinate.y / naturalSize.height) * displaySize.height;
+            const left = (coordinate.x / naturalSize.width) * displaySize.width;
+            const top = (coordinate.y / naturalSize.height) * displaySize.height;
 
-              return (
-                <View
-                  key={`placed-${item.id}`}
-                  pointerEvents="none"
-                  style={[
-                    styles.placedMarker,
-                    {
-                      left: left - 12,
-                      top: top - 12,
-                    },
-                  ]}
-                >
-                  <Text style={styles.placedMarkerText}>⊕</Text>
-                </View>
-              );
-            })}
-          </Pressable>
-        </View>
-      ) : image ? (
-        <View style={styles.imageErrorBox}>
-          <Text style={styles.imageErrorTitle}>Không tải được hình câu hỏi</Text>
-          <Text style={styles.imageErrorText}>
-            Kiểm tra Moodle URL, token Web Service và khả năng điện thoại truy cập máy chủ Moodle.
-          </Text>
-        </View>
+            return (
+              <View
+                key={`placed-${item.id}`}
+                pointerEvents="none"
+                style={[
+                  styles.placedMarker,
+                  {
+                    left: left - 12,
+                    top: top - 12,
+                  },
+                ]}
+              >
+                <Text style={styles.placedMarkerText}>⊕</Text>
+              </View>
+            );
+          })}
+        </Pressable>
       ) : (
         <View style={styles.imageErrorBox}>
           <Text style={styles.imageErrorTitle}>
-            Không tìm thấy hình nền trong response Moodle
+            {sourceImage
+              ? "Không tải được hình nền câu hỏi"
+              : "Không tìm thấy URL ảnh nền qtype_ddmarker/bgimage"}
+          </Text>
+          <Text style={styles.imageErrorText}>
+            Ảnh marker phải được lấy từ đúng trường qtype_ddmarker/bgimage trong question.html.
           </Text>
         </View>
       )}
@@ -195,6 +264,20 @@ export default function DragMarkerQuestion({
       <Text style={styles.hint}>
         Chọn một marker ở trên, sau đó chạm vào vị trí tương ứng trên hình để đặt marker.
       </Text>
+
+      <View style={styles.statusBox}>
+        <Text style={styles.statusText}>
+          Nguồn ảnh: {extractedBackground ? "qtype_ddmarker/bgimage" : image ? "fallback parser" : "không có"}
+        </Text>
+        <Text style={styles.statusText}>
+          Trạng thái: {imageFailed ? "lỗi" : imageLoaded ? "đã tải" : "đang tải"}
+        </Text>
+        {imageLoaded && naturalSize.width > 0 && (
+          <Text style={styles.statusText}>
+            Kích thước ảnh: {naturalSize.width} × {naturalSize.height}
+          </Text>
+        )}
+      </View>
 
       {fields.length > 0 && (
         <View style={styles.debugArea}>
@@ -248,16 +331,21 @@ const styles = StyleSheet.create({
   markerText: {
     fontSize: 16,
   },
-  imageWrapper: {
-    width: "100%",
-    marginBottom: 12,
-  },
   imagePressable: {
     width: "100%",
     position: "relative",
-    backgroundColor: "#f7f7f7",
+    backgroundColor: "#ededed",
     borderRadius: 10,
     overflow: "hidden",
+    marginBottom: 12,
+  },
+  loadingLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: {
+    color: "#666",
   },
   placedMarker: {
     position: "absolute",
@@ -296,6 +384,17 @@ const styles = StyleSheet.create({
     marginTop: 4,
     color: "#555",
     lineHeight: 20,
+  },
+  statusBox: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: "#f1f3f5",
+  },
+  statusText: {
+    fontSize: 12,
+    color: "#555",
+    marginBottom: 2,
   },
   debugArea: {
     marginTop: 12,

@@ -124,6 +124,7 @@ export default function QuestionRenderer({
       return (
         <ClozeQuestion
           parts={question.clozeParts ?? []}
+          html={question.html}
           answers={answers}
           setAnswer={setAnswer}
         />

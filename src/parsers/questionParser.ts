@@ -60,8 +60,6 @@ function detectType(root: HTMLElement, html: string): QuestionType {
   if (html.includes("que ordering")) return "ordering";
 
   if (html.includes("que multichoice")) {
-    // Không kiểm tra checkbox trên toàn HTML vì Moodle luôn có checkbox
-    // "Flag question". Chỉ kiểm tra các control đáp án thực sự.
     const answerInputs = root.querySelectorAll(".answer input");
     const hasChoiceCheckbox = answerInputs.some((input) => {
       const type = input.getAttribute("type") ?? "";
@@ -97,13 +95,23 @@ function getLabelForInput(root: HTMLElement, input: HTMLElement): string {
   const parentLabel = input.closest("label");
   if (parentLabel) return cleanText(parentLabel.text);
 
-  // Fallback chỉ trong vùng answer, tránh lấy nhầm "Flag question".
   const answerRow = input.closest(".answer") ?? input.closest(".r0") ?? input.closest(".r1");
   return cleanText((answerRow as HTMLElement | undefined)?.text);
 }
 
 function stripChoicePrefix(label: string): string {
-  return label
+  // Calculated multichoice của Moodle đôi khi trả option dưới dạng
+  // <pre><code>11.50</code></pre>. Khi text bị escape, node-html-parser có thể
+  // trả literal "<code>11.50</code>". Chuẩn hóa để mobile chỉ hiện giá trị.
+  const normalized = label
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&amp;/gi, "&")
+    .replace(/<\/?(?:pre|code)\b[^>]*>/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return normalized
     .replace(/^[a-zA-Z][.)]\s*/, "")
     .replace(/^\d+[.)]\s*/, "")
     .trim();

@@ -3,24 +3,22 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { ParsedQuestion } from "../types/question";
 
-import DescriptionQuestion from "./DescriptionQuestion";
-import SingleChoiceQuestion from "./SingleChoiceQuestion";
-import MultipleChoiceQuestion from "./MultipleChoiceQuestion";
-import TextQuestion from "./TextQuestion";
-import EssayQuestion from "./EssayQuestion";
-import SelectMissingWordsQuestion from "./SelectMissingWordsQuestion";
-import MatchingQuestion from "./MatchingQuestion";
 import ClozeQuestion from "./ClozeQuestion";
-import OrderingQuestion from "./OrderingQuestion";
-import DragDropTextQuestion from "./DragDropTextQuestion";
+import DescriptionQuestion from "./DescriptionQuestion";
 import DragDropImageQuestion from "./DragDropImageQuestion";
+import DragDropTextQuestion from "./DragDropTextQuestion";
 import DragMarkerQuestion from "./DragMarkerQuestion";
+import EssayQuestion from "./EssayQuestion";
+import MatchingQuestion from "./MatchingQuestion";
+import MultipleChoiceQuestion from "./MultipleChoiceQuestion";
+import OrderingQuestion from "./OrderingQuestion";
+import SelectMissingWordsQuestion from "./SelectMissingWordsQuestion";
+import SingleChoiceQuestion from "./SingleChoiceQuestion";
+import TextQuestion from "./TextQuestion";
 
 interface Props {
   question: ParsedQuestion;
-
   answers: Record<string, string>;
-
   setAnswer: (field: string, value: string) => void;
 }
 
@@ -31,7 +29,12 @@ export default function QuestionRenderer({
 }: Props) {
   switch (question.type) {
     case "description":
-      return <DescriptionQuestion text={question.text} />;
+      return (
+        <DescriptionQuestion
+          text={question.text}
+          html={question.qtextHtml}
+        />
+      );
 
     case "multichoice-single":
     case "truefalse":
@@ -42,11 +45,9 @@ export default function QuestionRenderer({
           choices={question.choices ?? []}
           value={question.fieldName ? answers[question.fieldName] : undefined}
           onChange={(value) => {
-            if (!question.fieldName) {
-              return;
+            if (question.fieldName) {
+              setAnswer(question.fieldName, value);
             }
-
-            setAnswer(question.fieldName, value);
           }}
         />
       );
@@ -76,6 +77,7 @@ export default function QuestionRenderer({
 
     case "numerical":
     case "calculated":
+    case "calculatedsimple":
       return (
         <TextQuestion
           question={question.text}
@@ -113,6 +115,7 @@ export default function QuestionRenderer({
       );
 
     case "match":
+    case "randomsamatch":
       return (
         <MatchingQuestion
           question={question.text}
@@ -179,7 +182,9 @@ export default function QuestionRenderer({
     default:
       return (
         <View style={styles.error}>
-          <Text>Chưa hỗ trợ Beauty Render: {question.type}</Text>
+          <Text style={styles.errorTitle}>Chưa hỗ trợ Beauty Render</Text>
+          <Text>{question.type}</Text>
+          {!!question.text && <Text style={styles.fallbackText}>{question.text}</Text>}
         </View>
       );
   }
@@ -191,5 +196,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ddd",
     borderRadius: 10,
+  },
+  errorTitle: {
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+  fallbackText: {
+    marginTop: 10,
+    lineHeight: 22,
   },
 });

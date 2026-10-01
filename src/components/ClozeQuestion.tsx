@@ -1,12 +1,11 @@
 import React, { useMemo } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
-import { parse } from "node-html-parser";
 
 import { ClozePart } from "../types/question";
 
 interface Props {
   parts: ClozePart[];
-  html?: string;
+  qtextHtml?: string;
   answers: Record<string, string>;
   setAnswer: (field: string, value: string) => void;
 }
@@ -15,7 +14,7 @@ type RenderPart =
   | { type: "text"; text: string }
   | { type: "input"; fieldName: string; size?: number };
 
-function decodeText(value: string): string {
+function decodeHtml(value: string): string {
   return value
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
@@ -25,79 +24,78 @@ function decodeText(value: string): string {
     .replace(/&quot;/gi, '"');
 }
 
-function parseClozeHtml(html?: string): RenderPart[] {
-  if (!html) return [];
+function stripTags(value: string): string {
+  return decodeHtml(
+    value
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/p>/gi, "\n")
+      .replace(/<[^>]+>/g, ""),
+  );
+}
 
-  const root = parse(html);
-  const qtext = root.querySelector(".qtext") ?? root;
+/**
+ * Parse trực tiếp qtext HTML của Moodle thay vì phụ thuộc vào DOM traversal.
+ * Cloze hiện tại của Moodle trả các subquestion dưới dạng input text nằm inline.
+ */
+function parseClozeQtext(qtextHtml?: string): RenderPart[] {
+  if (!qtextHtml) return [];
+
+  let html = qtextHtml
+    // Bỏ accessibility labels như "Answer 1 Question 1".
+    .replace(
+      /<(?:label|span)[^>]*class=["'][^"']*(?:accesshide|sr-only|visually-hidden)[^"']*["'][^>]*>[\s\S]*?<\/(?:label|span)>/gi,
+      "",
+    );
+
   const result: RenderPart[] = [];
+  const inputRegex = /<input\b([^>]*)>/gi;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
 
-  const pushText = (value: string) => {
-    const text = decodeText(value);
-    if (!text) return;
-
-    const last = result[result.length - 1];
-    if (last?.type === "text") {
-      last.text += text;
-    } else {
-      result.push({ type: "text", text });
-    }
-  };
-
-  const walk = (node: any) => {
-    if (!node) return;
-
-    // Text node.
-    if (node.nodeType === 3) {
-      pushText(node.rawText ?? "");
-      return;
+  while ((match = inputRegex.exec(html)) !== null) {
+    const before = stripTags(html.slice(lastIndex, match.index));
+    if (before) {
+      result.push({ type: "text", text: before });
     }
 
-    const tagName = String(node.tagName ?? "").toUpperCase();
-    const className = String(node.getAttribute?.("class") ?? "");
+    const attrs = match[1] ?? "";
+    const type = attrs.match(/\btype=["']([^"']+)["']/i)?.[1]?.toLowerCase() ?? "text";
+    const fieldName = attrs.match(/\bname=["']([^"']+)["']/i)?.[1] ?? "";
+    const sizeRaw = attrs.match(/\bsize=["']([^"']+)["']/i)?.[1];
+    const size = sizeRaw ? Number(sizeRaw) : undefined;
 
-    // Moodle accessibility labels such as "Answer 1 Question 1" must not be shown.
-    if (/\b(accesshide|sr-only|visually-hidden)\b/i.test(className)) {
-      return;
+    if (type !== "hidden" && fieldName) {
+      result.push({
+        type: "input",
+        fieldName,
+        size: Number.isFinite(size) ? size : undefined,
+      });
     }
 
-    if (tagName === "BR") {
-      pushText("\n");
-      return;
-    }
+    lastIndex = inputRegex.lastIndex;
+  }
 
-    if (tagName === "INPUT") {
-      const type = String(node.getAttribute?.("type") ?? "text").toLowerCase();
-      const fieldName = node.getAttribute?.("name") ?? "";
-
-      if (type !== "hidden" && fieldName) {
-        const size = Number(node.getAttribute?.("size") ?? 0) || undefined;
-        result.push({ type: "input", fieldName, size });
-      }
-      return;
-    }
-
-    // Current survey sample uses embedded Short Answer/Numerical controls.
-    // Recurse through wrapper elements such as <p> and <span class="subquestion">.
-    const children = node.childNodes ?? [];
-    children.forEach((child: any) => walk(child));
-  };
-
-  walk(qtext);
+  const after = stripTags(html.slice(lastIndex));
+  if (after) {
+    result.push({ type: "text", text: after });
+  }
 
   return result.filter((part) => {
     if (part.type === "input") return Boolean(part.fieldName);
-    return part.text.length > 0;
+    return part.text.trim().length > 0;
   });
 }
 
 export default function ClozeQuestion({
   parts,
-  html,
+  qtextHtml,
   answers,
   setAnswer,
 }: Props) {
-  const parsedFromHtml = useMemo(() => parseClozeHtml(html), [html]);
+  const parsedFromHtml = useMemo(
+    () => parseClozeQtext(qtextHtml),
+    [qtextHtml],
+  );
 
   const renderParts: RenderPart[] =
     parsedFromHtml.length > 0
@@ -111,6 +109,16 @@ export default function ClozeQuestion({
               },
         );
 
+  if (renderParts.length === 0) {
+    return (
+      <View style={styles.fallbackBox}>
+        <Text style={styles.fallbackText}>
+          Không đọc được nội dung câu trả lời nhúng từ Moodle.
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {renderParts.map((part, index) => {
@@ -123,16 +131,19 @@ export default function ClozeQuestion({
         }
 
         const field = part.fieldName;
-        const inputWidth = part.size && part.size <= 4 ? 74 : 180;
+        const isShortNumeric = Boolean(part.size && part.size <= 4);
 
         return (
           <TextInput
             key={`${field}-${index}`}
             value={answers[field] ?? ""}
             onChangeText={(value) => setAnswer(field, value)}
-            style={[styles.input, { minWidth: inputWidth }]}
+            style={[
+              styles.input,
+              isShortNumeric ? styles.shortInput : styles.longInput,
+            ]}
             placeholder="..."
-            keyboardType={part.size && part.size <= 4 ? "decimal-pad" : "default"}
+            keyboardType={isShortNumeric ? "decimal-pad" : "default"}
           />
         );
       })}
@@ -161,5 +172,20 @@ const styles = StyleSheet.create({
     marginVertical: 4,
     fontSize: 16,
     backgroundColor: "#fff",
+  },
+  longInput: {
+    minWidth: 190,
+  },
+  shortInput: {
+    minWidth: 74,
+  },
+  fallbackBox: {
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+  },
+  fallbackText: {
+    color: "#666",
   },
 });

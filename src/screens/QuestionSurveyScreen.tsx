@@ -14,7 +14,7 @@ import { parseQuestion } from "../parsers/questionParser";
 import { ParsedQuestion } from "../types/question";
 
 const TOKEN = "e43072d04495aafb9af1291474a5701d";
-const ATTEMPT_ID = 140;
+const ATTEMPT_ID = 139;
 
 interface SurveyQuestion {
   slot: number;
@@ -104,7 +104,7 @@ export default function QuestionSurveyScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
-        <Text style={styles.title}>Beauty Render</Text>
+        <Text style={styles.title}>Raw Render</Text>
         <Text style={styles.subtitle}>
           Trang Moodle {page + 1} · {questions.length} câu hỏi
         </Text>
@@ -114,7 +114,6 @@ export default function QuestionSurveyScreen() {
         <View key={`${item.slot}-${index}`} style={styles.questionCard}>
           <View style={styles.questionHeader}>
             <Text style={styles.questionNumber}>Câu {item.slot}</Text>
-            <Text style={styles.type}>{item.parsed.type}</Text>
           </View>
 
           <QuestionRenderer
@@ -137,13 +136,6 @@ export default function QuestionSurveyScreen() {
         <Pressable style={styles.navButton} onPress={() => loadPage(page + 1)}>
           <Text style={styles.navText}>Trang sau →</Text>
         </Pressable>
-      </View>
-
-      <View style={styles.debugBox}>
-        <Text style={styles.debugTitle}>Response đang tạo</Text>
-        <Text selectable style={styles.debugText}>
-          {JSON.stringify(answers, null, 2)}
-        </Text>
       </View>
     </ScrollView>
   );

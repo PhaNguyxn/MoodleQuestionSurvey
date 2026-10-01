@@ -120,6 +120,7 @@ export default function QuestionRenderer({
         <ClozeQuestion
           parts={question.clozeParts ?? []}
           qtextHtml={question.qtextHtml}
+          rawHtml={question.html}
           answers={answers}
           setAnswer={setAnswer}
         />

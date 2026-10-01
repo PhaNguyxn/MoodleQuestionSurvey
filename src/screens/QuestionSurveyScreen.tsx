@@ -13,7 +13,7 @@ import QuestionRenderer from "../components/QuestionRenderer";
 import { parseQuestion } from "../parsers/questionParser";
 import { ParsedQuestion } from "../types/question";
 
-const TOKEN = "e43072d04495aafb9af1291474a5701d";
+const TOKEN = process.env.EXPO_PUBLIC_MOODLE_TOKEN ?? "";
 const ATTEMPT_ID = 140;
 
 interface SurveyQuestion {
@@ -37,6 +37,10 @@ export default function QuestionSurveyScreen() {
       setLoading(true);
       setError(null);
 
+      if (!TOKEN) {
+        throw new Error("Thiếu EXPO_PUBLIC_MOODLE_TOKEN trong file .env");
+      }
+
       const data = await getAttemptData(TOKEN, ATTEMPT_ID, targetPage);
 
       if (data?.exception || data?.errorcode) {
@@ -54,7 +58,6 @@ export default function QuestionSurveyScreen() {
       setQuestions(parsedQuestions);
       setPage(targetPage);
 
-      // Moodle trả nextpage = -1 khi không còn trang kế tiếp.
       const apiNextPage = Number(data?.nextpage);
       setNextPage(Number.isFinite(apiNextPage) && apiNextPage >= 0 ? apiNextPage : null);
     } catch (e) {
@@ -133,6 +136,7 @@ export default function QuestionSurveyScreen() {
             question={item.parsed}
             answers={answers}
             setAnswer={setAnswer}
+            token={TOKEN}
           />
         </View>
       ))}
@@ -179,20 +183,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 24,
   },
-  loadingText: {
-    marginTop: 12,
-  },
-  header: {
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-  },
-  subtitle: {
-    marginTop: 4,
-    color: "#666",
-  },
+  loadingText: { marginTop: 12 },
+  header: { marginBottom: 16 },
+  title: { fontSize: 24, fontWeight: "700" },
+  subtitle: { marginTop: 4, color: "#666" },
   inlineError: {
     marginBottom: 12,
     padding: 12,
@@ -201,10 +195,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#efcaca",
   },
-  inlineErrorText: {
-    color: "#9b1c1c",
-    fontSize: 13,
-  },
+  inlineErrorText: { color: "#9b1c1c", fontSize: 13 },
   questionCard: {
     backgroundColor: "#fff",
     borderRadius: 16,
@@ -219,14 +210,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 14,
   },
-  questionNumber: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  type: {
-    fontSize: 12,
-    color: "#666",
-  },
+  questionNumber: { fontSize: 16, fontWeight: "700" },
+  type: { fontSize: 12, color: "#666" },
   navigation: {
     flexDirection: "row",
     gap: 12,
@@ -242,12 +227,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#fff",
   },
-  navDisabled: {
-    opacity: 0.35,
-  },
-  navText: {
-    fontWeight: "600",
-  },
+  navDisabled: { opacity: 0.35 },
+  navText: { fontWeight: "600" },
   debugBox: {
     marginTop: 18,
     backgroundColor: "#fff",
@@ -256,24 +237,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e4e7eb",
   },
-  debugTitle: {
-    fontWeight: "700",
-    marginBottom: 8,
-  },
-  debugText: {
-    fontFamily: "monospace",
-    fontSize: 12,
-  },
-  errorTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 8,
-  },
-  errorText: {
-    textAlign: "center",
-    marginBottom: 16,
-    color: "#666",
-  },
+  debugTitle: { fontWeight: "700", marginBottom: 8 },
+  debugText: { fontFamily: "monospace", fontSize: 12 },
+  errorTitle: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
+  errorText: { textAlign: "center", marginBottom: 16, color: "#666" },
   retryButton: {
     paddingHorizontal: 18,
     paddingVertical: 12,
@@ -281,7 +248,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#aaa",
   },
-  retryText: {
-    fontWeight: "600",
-  },
+  retryText: { fontWeight: "600" },
 });
